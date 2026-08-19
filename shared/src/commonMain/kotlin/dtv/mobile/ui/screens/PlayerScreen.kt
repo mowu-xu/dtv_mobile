@@ -134,6 +134,7 @@ fun PlayerScreen(
 
   var danmakuEnabled by remember(streamer?.roomId) { mutableStateOf(true) }
   var danmakuMessages by remember(streamer?.roomId) { mutableStateOf<List<DanmakuMessage>>(emptyList()) }
+  var danmakuSeq by remember(streamer?.roomId) { mutableStateOf(0L) }
   var danmakuMax by remember { mutableIntStateOf(200) }
   var videoAspectRatio by remember(streamer?.roomId) { mutableStateOf<Float?>(null) }
   var videoReady by remember(streamer?.roomId) { mutableStateOf(false) }
@@ -222,6 +223,7 @@ fun PlayerScreen(
     } ?: return@LaunchedEffect
 
     danmakuMessages = emptyList()
+    danmakuSeq = 0L
     try {
       flow.collectLatest { msg ->
         if (blockKeywordsLower.isNotEmpty()) {
@@ -229,6 +231,7 @@ fun PlayerScreen(
           if (blockKeywordsLower.any { contentLower.contains(it) }) return@collectLatest
         }
         danmakuMessages = (danmakuMessages + msg).takeLast(danmakuMax)
+        danmakuSeq++
       }
     } catch (t: Throwable) {
       if (t is CancellationException) throw t
@@ -595,6 +598,7 @@ fun PlayerScreen(
                 ScrollingDanmakuOverlay(
                   resetKey = streamer?.roomId,
                   messages = danmakuMessages,
+                  sequence = danmakuSeq,
                   showUser = false,
                   areaFraction = appState.danmakuAreaFraction,
                   textScale = appState.landscapeDanmakuFontScale * appState.danmakuFontScale,
@@ -1265,6 +1269,7 @@ private fun HubDanmakuRow(
 private fun ScrollingDanmakuOverlay(
   resetKey: Any?,
   messages: List<DanmakuMessage>,
+  sequence: Long,
   showUser: Boolean,
   areaFraction: Float,
   textScale: Float = 1f,
@@ -1278,7 +1283,7 @@ private fun ScrollingDanmakuOverlay(
     val track: Int,
   )
 
-  var lastCount by remember(resetKey) { mutableIntStateOf(0) }
+  var lastSequence by remember(resetKey) { mutableStateOf(0L) }
   val maxActive = 48
 
   BoxWithConstraints(modifier = modifier) {
@@ -1331,37 +1336,35 @@ private fun ScrollingDanmakuOverlay(
       return bestReadyTrack.takeIf { bestReadyAt <= now + 120L }
     }
 
-    LaunchedEffect(messages.size, trackCount, widthPx, textScale) {
-      if (messages.size <= lastCount) {
-        lastCount = messages.size
+    LaunchedEffect(sequence, trackCount, widthPx, textScale) {
+    if (sequence <= lastSequence) {
         return@LaunchedEffect
-      }
-      val newItems = messages.subList(lastCount, messages.size)
-      newItems.forEach { msg ->
-        val user = msg.user.trim().ifBlank { "匿名" }
-        val content = msg.content.trim()
-        if (content.isNotEmpty()) {
-          val now = System.nanoTime() / 1_000_000L
-          val track = chooseTrack(now)
-          if (track != null) {
+    }
+    
+    val msg = messages.lastOrNull() ?: return@LaunchedEffect
+    val user = msg.user.trim().ifBlank { "匿名" }
+    val content = msg.content.trim()
+    if (content.isNotEmpty()) {
+        val now = System.nanoTime() / 1_000_000L
+        val track = chooseTrack(now)
+        if (track != null) {
             if (active.size >= maxActive) active.removeAt(0)
             active.add(
-              Active(
-                id = System.nanoTime(),
-                user = user,
-                content = content,
-                track = track,
-              ),
+                Active(
+                    id = System.nanoTime(),
+                    user = user,
+                    content = content,
+                    track = track,
+                ),
             )
             val textWidthPx = estimatedTextWidthPx(user, content).coerceAtLeast(1f)
             val travelWidthPx = widthPx + textWidthPx
             val minDelayMs = ceil((textWidthPx / travelWidthPx) * 9000f).toLong() + 80L
             laneAvailableAt[track] = now + minDelayMs
-          }
         }
-      }
-      lastCount = messages.size
     }
+    lastSequence = sequence
+}
 
     active.forEach { item ->
       key(item.id) {
