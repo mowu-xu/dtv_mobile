@@ -1,6 +1,5 @@
 package dtv.mobile.ui.screens
 
-
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.lazy.LazyColumn
@@ -100,9 +99,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -110,7 +107,6 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import kotlin.math.roundToInt
 import androidx.compose.runtime.snapshotFlow
@@ -137,7 +133,7 @@ fun PlayerScreen(
   var selectedBilibiliQn by remember(streamer?.roomId) { mutableStateOf<Int?>(null) }
   var showSettings by remember(streamer?.roomId) { mutableStateOf(false) }
   var showFollowedDrawer by remember(streamer?.roomId) { mutableStateOf(false) }
-  
+
   var danmakuEnabled by remember(streamer?.roomId) { mutableStateOf(true) }
   var danmakuMessages by remember(streamer?.roomId) { mutableStateOf<List<DanmakuMessage>>(emptyList()) }
   var danmakuSeq by remember(streamer?.roomId) { mutableStateOf(0L) }
@@ -506,17 +502,17 @@ fun PlayerScreen(
           color = videoSurfaceColor,
           modifier = videoSurfaceModifier,
         ) {
-         Box(
-    modifier = Modifier
-        .fillMaxSize()
-        .then(
-            if (fullscreen) Modifier.pointerInput(Unit) {
-                detectTapGestures(
+          Box(
+            modifier = Modifier
+              .fillMaxSize()
+              .then(
+                if (fullscreen) Modifier.pointerInput(Unit) {
+                  detectTapGestures(
                     onLongPress = { showFollowedDrawer = true }
-                )
-            } else Modifier
-        )
-)  {
+                  )
+                } else Modifier
+              )
+          ) {
             if (url != null) {
               StreamPlayer(
                 url = url!!,
@@ -553,47 +549,47 @@ fun PlayerScreen(
                       color = if (fullscreen) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.85f),
                     )
                   }
-                streamer.isLive == false -> {
-                  Surface(
-                    shape = RoundedCornerShape(28.dp),
-                    color = if (fullscreen) Color.Black.copy(alpha = 0.30f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                  ) {
-                    Column(
-                      modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                      verticalArrangement = Arrangement.spacedBy(6.dp),
-                      horizontalAlignment = Alignment.CenterHorizontally,
+                  streamer.isLive == false -> {
+                    Surface(
+                      shape = RoundedCornerShape(28.dp),
+                      color = if (fullscreen) Color.Black.copy(alpha = 0.30f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                      tonalElevation = 0.dp,
+                      shadowElevation = 0.dp,
                     ) {
-                      Text(
-                        text = "主播未开播",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
-                        color = if (fullscreen) Color.White.copy(alpha = 0.92f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
-                      )
-                      Text(
-                        text = "当前直播间没有在直播",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (fullscreen) Color.White.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                      )
+                      Column(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                      ) {
+                        Text(
+                          text = "主播未开播",
+                          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                          color = if (fullscreen) Color.White.copy(alpha = 0.92f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
+                        )
+                        Text(
+                          text = "当前直播间没有在直播",
+                          style = MaterialTheme.typography.bodySmall,
+                          color = if (fullscreen) Color.White.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        )
+                      }
                     }
                   }
-                }
-                loading -> {
-                  CircularProgressIndicator(
-                    color = if (fullscreen) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.primary,
-                    strokeWidth = 3.dp,
-                  )
-                }
-                error != null -> {
-                  Text(
-                    text = error!!,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (fullscreen) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.85f),
-                  )
+                  loading -> {
+                    CircularProgressIndicator(
+                      color = if (fullscreen) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.primary,
+                      strokeWidth = 3.dp,
+                    )
+                  }
+                  error != null -> {
+                    Text(
+                      text = error!!,
+                      style = MaterialTheme.typography.bodyMedium,
+                      color = if (fullscreen) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.85f),
+                    )
+                  }
                 }
               }
             }
-          }
 
             if (verticalFullBleed) {
               PlayerHeader(
@@ -696,15 +692,16 @@ fun PlayerScreen(
         settingsContent()
       }
     }
+
     FollowedStreamersDrawer(
-    visible = showFollowedDrawer,
-    followedStreamers = appState.followedStreamers.filter { it.isLive },
-    onDismissRequest = { showFollowedDrawer = false },
-    onSelectStreamer = { s ->
+      visible = showFollowedDrawer,
+      followedStreamers = appState.followedStreamers.filter { it.isLive },
+      onDismissRequest = { showFollowedDrawer = false },
+      onSelectStreamer = { s ->
         showFollowedDrawer = false
-        appState.openStreamer(s)
-    },
-)
+        appState.openPlayer(s)
+      },
+    )
   }
 }
 
@@ -816,15 +813,15 @@ private fun PlayerHeader(
   onToggleFollow: (Streamer) -> Unit,
   modifier: Modifier = Modifier,
   overlay: Boolean = false,
-  ) {
-    val liveDot = if (streamer?.isLive == true) MaterialTheme.colorScheme.primary else Color(0xFF9CA3AF)
-    val glassBg = Brush.linearGradient(
-      colors = listOf(
-        Color.Black.copy(alpha = 0.42f),
-        Color.Black.copy(alpha = 0.22f),
-      ),
-    )
-    val glassBorder = Color.White.copy(alpha = 0.16f)
+) {
+  val liveDot = if (streamer?.isLive == true) MaterialTheme.colorScheme.primary else Color(0xFF9CA3AF)
+  val glassBg = Brush.linearGradient(
+    colors = listOf(
+      Color.Black.copy(alpha = 0.42f),
+      Color.Black.copy(alpha = 0.22f),
+    ),
+  )
+  val glassBorder = Color.White.copy(alpha = 0.16f)
 
   Column(
     modifier = modifier
@@ -868,76 +865,76 @@ private fun PlayerHeader(
               verticalAlignment = Alignment.CenterVertically,
               horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-          val avatar = normalizeHttpUrl(streamer?.avatarUrl)
-          Box(modifier = Modifier.size(avatarSize)) {
-            Box(
-              modifier = Modifier
-                .matchParentSize()
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.10f)),
-              contentAlignment = Alignment.Center,
-            ) {
-              if (avatar != null) {
-                NetworkImage(url = avatar, contentDescription = streamer?.name, modifier = Modifier.matchParentSize())
-              } else {
+              val avatar = normalizeHttpUrl(streamer?.avatarUrl)
+              Box(modifier = Modifier.size(avatarSize)) {
+                Box(
+                  modifier = Modifier
+                    .matchParentSize()
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.10f)),
+                  contentAlignment = Alignment.Center,
+                ) {
+                  if (avatar != null) {
+                    NetworkImage(url = avatar, contentDescription = streamer?.name, modifier = Modifier.matchParentSize())
+                  } else {
+                    Text(
+                      text = streamer?.name?.take(1).orEmpty(),
+                      color = infoPrimary,
+                      style = MaterialTheme.typography.titleSmall,
+                      textAlign = TextAlign.Center,
+                    )
+                  }
+                }
+
+                if (streamer != null) {
+                  Box(
+                    modifier = Modifier
+                      .align(Alignment.BottomEnd)
+                      .offset(x = 1.dp, y = 1.dp)
+                      .size(10.dp)
+                      .clip(CircleShape)
+                      .background(liveDot)
+                      .border(width = 2.dp, color = Color.Transparent, shape = CircleShape),
+                  )
+                }
+              }
+
+              Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+              ) {
                 Text(
-                  text = streamer?.name?.take(1).orEmpty(),
+                  text = streamer?.name.orEmpty(),
+                  style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
                   color = infoPrimary,
-                  style = MaterialTheme.typography.titleSmall,
-                  textAlign = TextAlign.Center,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                  text = streamer?.title?.trim().orEmpty(),
+                  style = MaterialTheme.typography.labelSmall,
+                  color = infoSecondary,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
                 )
               }
-            }
 
-            if (streamer != null) {
-              Box(
-                modifier = Modifier
-                  .align(Alignment.BottomEnd)
-                  .offset(x = 1.dp, y = 1.dp)
-                  .size(10.dp)
-                  .clip(CircleShape)
-                  .background(liveDot)
-                  .border(width = 2.dp, color = Color.Transparent, shape = CircleShape),
-              )
-            }
-          }
-
-          Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
-          ) {
-            Text(
-              text = streamer?.name.orEmpty(),
-              style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
-              color = infoPrimary,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-              text = streamer?.title?.trim().orEmpty(),
-              style = MaterialTheme.typography.labelSmall,
-              color = infoSecondary,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-          }
-
-          if (streamer != null) {
-            val iconTint = if (followed) Color(0xFFE11D48) else infoSecondary
-            Box(
-              modifier = Modifier
-                .size(avatarSize)
-                .clip(CircleShape)
-                .clickable { onToggleFollow(streamer) },
-              contentAlignment = Alignment.Center,
-            ) {
-              Icon(
-                imageVector = if (followed) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                contentDescription = if (followed) "已收藏" else "收藏",
-                tint = iconTint,
-              )
-            }
-          }
+              if (streamer != null) {
+                val iconTint = if (followed) Color(0xFFE11D48) else infoSecondary
+                Box(
+                  modifier = Modifier
+                    .size(avatarSize)
+                    .clip(CircleShape)
+                    .clickable { onToggleFollow(streamer) },
+                  contentAlignment = Alignment.Center,
+                ) {
+                  Icon(
+                    imageVector = if (followed) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (followed) "已收藏" else "收藏",
+                    tint = iconTint,
+                  )
+                }
+              }
             }
           }
         }
@@ -1319,7 +1316,6 @@ private fun ScrollingDanmakuOverlay(
     val regionHeightPx = (heightPx * areaFraction).coerceAtLeast(1f)
     val usableHeightPx = (regionHeightPx - regionTopPx).coerceAtLeast(1f)
 
-    // Avoid overlap when text size changes: compute track count based on estimated bubble height.
     val base = MaterialTheme.typography.bodySmall
     val fontSizePx = with(density) {
       (if (base.fontSize == TextUnit.Unspecified) 12.sp else base.fontSize).toPx()
@@ -1362,34 +1358,33 @@ private fun ScrollingDanmakuOverlay(
     }
 
     LaunchedEffect(sequence, trackCount, widthPx, textScale) {
-    if (sequence <= lastSequence) {
+      if (sequence <= lastSequence) {
         return@LaunchedEffect
-    }
-    
-    val msg = messages.lastOrNull() ?: return@LaunchedEffect
-    val user = msg.user.trim().ifBlank { "匿名" }
-    val content = msg.content.trim()
-    if (content.isNotEmpty()) {
+      }
+      val msg = messages.lastOrNull() ?: return@LaunchedEffect
+      val user = msg.user.trim().ifBlank { "匿名" }
+      val content = msg.content.trim()
+      if (content.isNotEmpty()) {
         val now = System.nanoTime() / 1_000_000L
         val track = chooseTrack(now)
         if (track != null) {
-            if (active.size >= maxActive) active.removeAt(0)
-            active.add(
-                Active(
-                    id = System.nanoTime(),
-                    user = user,
-                    content = content,
-                    track = track,
-                ),
-            )
-            val textWidthPx = estimatedTextWidthPx(user, content).coerceAtLeast(1f)
-            val travelWidthPx = widthPx + textWidthPx
-            val minDelayMs = ceil((textWidthPx / travelWidthPx) * 9000f).toLong() + 80L
-            laneAvailableAt[track] = now + minDelayMs
+          if (active.size >= maxActive) active.removeAt(0)
+          active.add(
+            Active(
+              id = System.nanoTime(),
+              user = user,
+              content = content,
+              track = track,
+            ),
+          )
+          val textWidthPx = estimatedTextWidthPx(user, content).coerceAtLeast(1f)
+          val travelWidthPx = widthPx + textWidthPx
+          val minDelayMs = ceil((textWidthPx / travelWidthPx) * 9000f).toLong() + 80L
+          laneAvailableAt[track] = now + minDelayMs
         }
+      }
+      lastSequence = sequence
     }
-    lastSequence = sequence
-}
 
     active.forEach { item ->
       key(item.id) {
@@ -1520,180 +1515,183 @@ private fun RowWrapFloat(
       )
     }
   }
+}
 
+@Composable
 private fun FollowedStreamersDrawer(
-    visible: Boolean,
-    followedStreamers: List<Streamer>,
-    onDismissRequest: () -> Unit,
-    onSelectStreamer: (Streamer) -> Unit,
+  visible: Boolean,
+  followedStreamers: List<Streamer>,
+  onDismissRequest: () -> Unit,
+  onSelectStreamer: (Streamer) -> Unit,
 ) {
-    val nightScheme = remember {
-        darkColorScheme(
-            primary = DtvColors.NightAccent,
-            onPrimary = DtvColors.NightTextPrimary,
-            secondary = DtvColors.NightBgTertiary,
-            onSecondary = DtvColors.NightTextPrimary,
-            background = DtvColors.NightBgPrimary,
-            onBackground = DtvColors.NightTextPrimary,
-            surface = DtvColors.NightBgSecondary,
-            onSurface = DtvColors.NightTextPrimary,
-            outline = DtvColors.NightBorder,
-        )
-    }
+  val nightScheme = remember {
+    darkColorScheme(
+      primary = DtvColors.NightAccent,
+      onPrimary = DtvColors.NightTextPrimary,
+      secondary = DtvColors.NightBgTertiary,
+      onSecondary = DtvColors.NightTextPrimary,
+      background = DtvColors.NightBgPrimary,
+      onBackground = DtvColors.NightTextPrimary,
+      surface = DtvColors.NightBgSecondary,
+      onSurface = DtvColors.NightTextPrimary,
+      outline = DtvColors.NightBorder,
+    )
+  }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        AnimatedVisibility(
-            visible = visible,
-            enter = fadeIn(animationSpec = tween(durationMillis = 140)),
-            exit = fadeOut(animationSpec = tween(durationMillis = 140)),
-            label = "followed_scrim",
-        ) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null,
-                        onClick = onDismissRequest,
-                    ),
-            )
-        }
-
-        AnimatedVisibility(
-            visible = visible,
-            enter = slideInHorizontally(animationSpec = tween(durationMillis = 220)) { it } +
-                fadeIn(animationSpec = tween(durationMillis = 140)),
-            exit = slideOutHorizontally(animationSpec = tween(durationMillis = 220)) { it } +
-                fadeOut(animationSpec = tween(durationMillis = 140)),
-            label = "followed_drawer",
-            modifier = Modifier.align(Alignment.CenterEnd),
-        ) {
-            Surface(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .fillMaxWidth(0.78f)
-                    .widthIn(max = 320.dp),
-                shape = RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp),
-                color = Color.Black.copy(alpha = 0.72f),
-                contentColor = DtvColors.NightTextPrimary,
-                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
-                tonalElevation = 0.dp,
-                shadowElevation = 6.dp,
-            ) {
-                MaterialTheme(colorScheme = nightScheme) {
-                    Column(modifier = Modifier.fillMaxSize()) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text = "正在直播的关注",
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier = Modifier.weight(1f),
-                            )
-                            Text(
-                                text = "${followedStreamers.size}",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
-                            )
-                        }
-
-                        if (followedStreamers.isEmpty()) {
-                            Box(
-                                modifier = Modifier.fillMaxSize(),
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Text(
-                                    text = "暂无正在直播的关注",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
-                                )
-                            }
-                        } else {
-                            LazyColumn(
-                                modifier = Modifier.fillMaxSize(),
-                                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp),
-                            ) {
-                                items(
-                                    items = followedStreamers,
-                                    key = { "${it.platform}:${it.roomId}" },
-                                ) { s ->
-                                    FollowedStreamerRow(
-                                        streamer = s,
-                                        onClick = { onSelectStreamer(s) },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-private fun FollowedStreamerRow(
-    streamer: Streamer,
-    onClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 8.dp, vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(10.dp),
+  Box(modifier = Modifier.fillMaxSize()) {
+    AnimatedVisibility(
+      visible = visible,
+      enter = fadeIn(animationSpec = tween(durationMillis = 140)),
+      exit = fadeOut(animationSpec = tween(durationMillis = 140)),
+      label = "followed_scrim",
     ) {
-        Box(
-            modifier = Modifier
-                .size(40.dp)
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.10f)),
-            contentAlignment = Alignment.Center,
-        ) {
-            val avatar = normalizeHttpUrl(streamer.avatarUrl)
-            if (avatar != null) {
-                NetworkImage(
-                    url = avatar,
-                    contentDescription = streamer.name,
-                    modifier = Modifier.matchParentSize(),
-                )
-            } else {
-                Text(
-                    text = streamer.name.take(1),
-                    color = Color.White.copy(alpha = 0.9f),
-                    style = MaterialTheme.typography.titleSmall,
-                )
-            }
-        }
-
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = streamer.name,
-                style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
-                color = Color.White.copy(alpha = 0.92f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = streamer.title.trim().ifBlank { "直播中" },
-                style = MaterialTheme.typography.labelSmall,
-                color = Color.White.copy(alpha = 0.6f),
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-        }
-
-        Box(
-            modifier = Modifier
-                .size(8.dp)
-                .clip(CircleShape)
-                .background(Color(0xFFE11D48)),
-        )
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(Color.Black.copy(alpha = 0.45f))
+          .clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onDismissRequest,
+          ),
+      )
     }
+
+    AnimatedVisibility(
+      visible = visible,
+      enter = slideInHorizontally(animationSpec = tween(durationMillis = 220)) { it } +
+        fadeIn(animationSpec = tween(durationMillis = 140)),
+      exit = slideOutHorizontally(animationSpec = tween(durationMillis = 220)) { it } +
+        fadeOut(animationSpec = tween(durationMillis = 140)),
+      label = "followed_drawer",
+      modifier = Modifier.align(Alignment.CenterEnd),
+    ) {
+      Surface(
+        modifier = Modifier
+          .fillMaxHeight()
+          .fillMaxWidth(0.78f)
+          .widthIn(max = 320.dp),
+        shape = RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp),
+        color = Color.Black.copy(alpha = 0.72f),
+        contentColor = DtvColors.NightTextPrimary,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 6.dp,
+      ) {
+        MaterialTheme(colorScheme = nightScheme) {
+          Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(
+                text = "正在直播的关注",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+              )
+              Text(
+                text = "${followedStreamers.size}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+              )
+            }
+
+            if (followedStreamers.isEmpty()) {
+              Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+              ) {
+                Text(
+                  text = "暂无正在直播的关注",
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+              }
+            } else {
+              LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+              ) {
+                items(
+                  items = followedStreamers,
+                  key = { "${it.platform}:${it.roomId}" },
+                ) { s ->
+                  FollowedStreamerRow(
+                    streamer = s,
+                    onClick = { onSelectStreamer(s) },
+                  )
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
 }
+
+@Composable
+private fun FollowedStreamerRow(
+  streamer: Streamer,
+  onClick: () -> Unit,
+) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(12.dp))
+      .clickable(onClick = onClick)
+      .padding(horizontal = 8.dp, vertical = 8.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    Box(
+      modifier = Modifier
+        .size(40.dp)
+        .clip(CircleShape)
+        .background(Color.White.copy(alpha = 0.10f)),
+      contentAlignment = Alignment.Center,
+    ) {
+      val avatar = normalizeHttpUrl(streamer.avatarUrl)
+      if (avatar != null) {
+        NetworkImage(
+          url = avatar,
+          contentDescription = streamer.name,
+          modifier = Modifier.matchParentSize(),
+        )
+      } else {
+        Text(
+          text = streamer.name.take(1),
+          color = Color.White.copy(alpha = 0.9f),
+          style = MaterialTheme.typography.titleSmall,
+        )
+      }
+    }
+
+    Column(modifier = Modifier.weight(1f)) {
+      Text(
+        text = streamer.name,
+        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+        color = Color.White.copy(alpha = 0.92f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+      Text(
+        text = streamer.title.trim().ifBlank { "直播中" },
+        style = MaterialTheme.typography.labelSmall,
+        color = Color.White.copy(alpha = 0.6f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
+
+    Box(
+      modifier = Modifier
+        .size(8.dp)
+        .clip(CircleShape)
+        .background(Color(0xFFE11D48)),
+    )
+  }
 }
