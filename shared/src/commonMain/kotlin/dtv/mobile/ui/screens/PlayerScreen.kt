@@ -142,6 +142,10 @@ fun PlayerScreen(
   var videoReady by remember(streamer?.roomId) { mutableStateOf(false) }
   var fullscreen by remember(streamer?.roomId) { mutableStateOf(false) }
   var fullscreenEntry by remember(streamer?.roomId) { mutableStateOf(FullscreenEntry.None) }
+  // 用户是否手动退出过全屏。切换直播间时自动重置为 false。
+  var userExitedFullscreen by remember(streamer?.roomId) { mutableStateOf(false) }
+  // 自动全屏只触发一次，避免反复切换。
+  var autoFullscreenDone by remember(streamer?.roomId) { mutableStateOf(false) }
 
   val scope = rememberCoroutineScope()
 
@@ -268,6 +272,28 @@ fun PlayerScreen(
       loading = false
     }
   }
+
+  // 自动全屏：等视频宽高比回传后，如果是横屏视频就自动进入全屏（只触发一次）。
+  LaunchedEffect(videoAspectRatio, streamer?.roomId) {
+    if (autoFullscreenDone) return@LaunchedEffect
+    if (userExitedFullscreen) return@LaunchedEffect
+    if (fullscreen) {
+      autoFullscreenDone = true
+      return@LaunchedEffect
+    }
+    val aspect = videoAspectRatio ?: return@LaunchedEffect
+    if (aspect <= 0f) return@LaunchedEffect
+    if (aspect < 1f) {
+      // 竖屏视频，不自动全屏。
+      autoFullscreenDone = true
+      return@LaunchedEffect
+    }
+    // 横屏视频，自动全屏。
+    fullscreen = true
+    fullscreenEntry = FullscreenEntry.Auto
+    autoFullscreenDone = true
+  }
+
   BoxWithConstraints(
     modifier = Modifier
       .fillMaxSize()
@@ -281,14 +307,36 @@ fun PlayerScreen(
       lockLandscape = fullscreenEntry == FullscreenEntry.Manual,
       exitToPortrait = fullscreenEntry == FullscreenEntry.ManualOff,
     )
-    PlatformBackHandler(enabled = fullscreen) {
-      fullscreen = false
-      fullscreenEntry = FullscreenEntry.None
-    }
 
     val settingsStreamer = streamer
     val showSettingsDrawer = showSettings && settingsStreamer != null && fullscreen && isLandscapeLayout
     val showSettingsSheet = showSettings && settingsStreamer != null && !showSettingsDrawer
+
+    // 返回键处理：
+    // 1) 关注抽屉打开 → 关闭抽屉
+    // 2) 设置抽屉/底部弹窗打开 → 关闭设置
+    // 3) 全屏 → 退出全屏（并标记用户已手动退出）
+    // 4) 其他 → 返回上一页
+    PlatformBackHandler(enabled = showFollowedDrawer) {
+      showFollowedDrawer = false
+    }
+    PlatformBackHandler(
+      enabled = !showFollowedDrawer && (showSettingsDrawer || showSettingsSheet),
+    ) {
+      showSettings = false
+    }
+    PlatformBackHandler(
+      enabled = !showFollowedDrawer && !showSettingsDrawer && !showSettingsSheet && fullscreen,
+    ) {
+      fullscreen = false
+      fullscreenEntry = FullscreenEntry.None
+      userExitedFullscreen = true
+    }
+    PlatformBackHandler(
+      enabled = !showFollowedDrawer && !showSettingsDrawer && !showSettingsSheet && !fullscreen,
+    ) {
+      appState.back()
+    }
 
     val settingsContent: @Composable () -> Unit = settingsContent@{
       val s = settingsStreamer ?: return@settingsContent
@@ -422,8 +470,6 @@ fun PlayerScreen(
       }
     }
 
-    PlatformBackHandler(enabled = showSettingsDrawer || showSettingsSheet) { showSettings = false }
-
     val effectiveAspect = videoAspectRatio?.takeIf { it > 0f }
     val isVideoAspectKnown = effectiveAspect != null
     val layoutAspect = effectiveAspect ?: (16f / 9f)
@@ -436,19 +482,6 @@ fun PlayerScreen(
       url == null &&
       error == null &&
       loading
-
-    LaunchedEffect(isLandscapeLayout) {
-      // Rotating to landscape should behave like fullscreen (hide bottom bar, system bars).
-      if (isLandscapeLayout && !fullscreen && fullscreenEntry != FullscreenEntry.ManualOff) {
-        fullscreen = true
-        fullscreenEntry = FullscreenEntry.Auto
-      } else if (!isLandscapeLayout && fullscreenEntry == FullscreenEntry.Auto) {
-        fullscreen = false
-        fullscreenEntry = FullscreenEntry.None
-      } else if (!isLandscapeLayout && fullscreenEntry == FullscreenEntry.ManualOff) {
-        fullscreenEntry = FullscreenEntry.None
-      }
-    }
 
     val content: @Composable () -> Unit = {
       Column(
@@ -641,6 +674,7 @@ fun PlayerScreen(
                 if (fullscreen) {
                   fullscreen = false
                   fullscreenEntry = if (isLandscapeLayout) FullscreenEntry.ManualOff else FullscreenEntry.None
+                  userExitedFullscreen = true
                 } else {
                   fullscreen = true
                   fullscreenEntry = FullscreenEntry.Manual
