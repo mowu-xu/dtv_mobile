@@ -1,5 +1,9 @@
 package dtv.mobile.ui.screens
 
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -9,7 +13,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -95,9 +98,7 @@ import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
@@ -105,11 +106,8 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.offset
 import kotlin.math.roundToInt
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -131,14 +129,18 @@ fun PlayerScreen(
   var selectedDouyinQuality by remember(streamer?.roomId) { mutableStateOf<String?>(null) }
   var selectedBilibiliQn by remember(streamer?.roomId) { mutableStateOf<Int?>(null) }
   var showSettings by remember(streamer?.roomId) { mutableStateOf(false) }
+  var showFollowedDrawer by remember(streamer?.roomId) { mutableStateOf(false) }
 
   var danmakuEnabled by remember(streamer?.roomId) { mutableStateOf(true) }
   var danmakuMessages by remember(streamer?.roomId) { mutableStateOf<List<DanmakuMessage>>(emptyList()) }
+  var danmakuSeq by remember(streamer?.roomId) { mutableStateOf(0L) }
   var danmakuMax by remember { mutableIntStateOf(200) }
   var videoAspectRatio by remember(streamer?.roomId) { mutableStateOf<Float?>(null) }
   var videoReady by remember(streamer?.roomId) { mutableStateOf(false) }
   var fullscreen by remember(streamer?.roomId) { mutableStateOf(false) }
   var fullscreenEntry by remember(streamer?.roomId) { mutableStateOf(FullscreenEntry.None) }
+  var userExitedFullscreen by remember(streamer?.roomId) { mutableStateOf(false) }
+  var autoFullscreenDone by remember(streamer?.roomId) { mutableStateOf(false) }
 
   val scope = rememberCoroutineScope()
 
@@ -222,6 +224,7 @@ fun PlayerScreen(
     } ?: return@LaunchedEffect
 
     danmakuMessages = emptyList()
+    danmakuSeq = 0L
     try {
       flow.collectLatest { msg ->
         if (blockKeywordsLower.isNotEmpty()) {
@@ -229,10 +232,10 @@ fun PlayerScreen(
           if (blockKeywordsLower.any { contentLower.contains(it) }) return@collectLatest
         }
         danmakuMessages = (danmakuMessages + msg).takeLast(danmakuMax)
+        danmakuSeq++
       }
     } catch (t: Throwable) {
       if (t is CancellationException) throw t
-      // Swallow network/parse errors to avoid crashing the player UI.
     }
   }
 
@@ -263,6 +266,22 @@ fun PlayerScreen(
       loading = false
     }
   }
+
+  // 自动全屏：宽高比回传后，无条件进入全屏并锁横屏（只触发一次）。
+  LaunchedEffect(videoAspectRatio, streamer?.roomId) {
+    if (autoFullscreenDone) return@LaunchedEffect
+    if (userExitedFullscreen) return@LaunchedEffect
+    if (fullscreen) {
+      autoFullscreenDone = true
+      return@LaunchedEffect
+    }
+    val aspect = videoAspectRatio ?: return@LaunchedEffect
+    if (aspect <= 0f) return@LaunchedEffect
+    fullscreen = true
+    fullscreenEntry = FullscreenEntry.Manual
+    autoFullscreenDone = true
+  }
+
   BoxWithConstraints(
     modifier = Modifier
       .fillMaxSize()
@@ -276,14 +295,31 @@ fun PlayerScreen(
       lockLandscape = fullscreenEntry == FullscreenEntry.Manual,
       exitToPortrait = fullscreenEntry == FullscreenEntry.ManualOff,
     )
-    PlatformBackHandler(enabled = fullscreen) {
-      fullscreen = false
-      fullscreenEntry = FullscreenEntry.None
-    }
 
     val settingsStreamer = streamer
     val showSettingsDrawer = showSettings && settingsStreamer != null && fullscreen && isLandscapeLayout
     val showSettingsSheet = showSettings && settingsStreamer != null && !showSettingsDrawer
+
+    PlatformBackHandler(enabled = showFollowedDrawer) {
+      showFollowedDrawer = false
+    }
+    PlatformBackHandler(
+      enabled = !showFollowedDrawer && (showSettingsDrawer || showSettingsSheet),
+    ) {
+      showSettings = false
+    }
+    PlatformBackHandler(
+      enabled = !showFollowedDrawer && !showSettingsDrawer && !showSettingsSheet && fullscreen,
+    ) {
+      fullscreen = false
+      fullscreenEntry = FullscreenEntry.None
+      userExitedFullscreen = true
+    }
+    PlatformBackHandler(
+      enabled = !showFollowedDrawer && !showSettingsDrawer && !showSettingsSheet && !fullscreen,
+    ) {
+      appState.back()
+    }
 
     val settingsContent: @Composable () -> Unit = settingsContent@{
       val s = settingsStreamer ?: return@settingsContent
@@ -417,33 +453,14 @@ fun PlayerScreen(
       }
     }
 
-    PlatformBackHandler(enabled = showSettingsDrawer || showSettingsSheet) { showSettings = false }
-
     val effectiveAspect = videoAspectRatio?.takeIf { it > 0f }
     val isVideoAspectKnown = effectiveAspect != null
     val layoutAspect = effectiveAspect ?: (16f / 9f)
-    val isVerticalVideo = isVideoAspectKnown && (effectiveAspect!! < 1f)
-    val isHorizontalVideo = isVideoAspectKnown && !isVerticalVideo
-    val verticalFullBleed = !fullscreen && isVerticalVideo
     val showFullPageLoading = !fullscreen &&
-      !verticalFullBleed &&
       streamer?.isLive == true &&
       url == null &&
       error == null &&
       loading
-
-    LaunchedEffect(isLandscapeLayout) {
-      // Rotating to landscape should behave like fullscreen (hide bottom bar, system bars).
-      if (isLandscapeLayout && !fullscreen && fullscreenEntry != FullscreenEntry.ManualOff) {
-        fullscreen = true
-        fullscreenEntry = FullscreenEntry.Auto
-      } else if (!isLandscapeLayout && fullscreenEntry == FullscreenEntry.Auto) {
-        fullscreen = false
-        fullscreenEntry = FullscreenEntry.None
-      } else if (!isLandscapeLayout && fullscreenEntry == FullscreenEntry.ManualOff) {
-        fullscreenEntry = FullscreenEntry.None
-      }
-    }
 
     val content: @Composable () -> Unit = {
       Column(
@@ -451,7 +468,7 @@ fun PlayerScreen(
           .fillMaxSize()
           .then(if (fullscreen) Modifier.background(Color.Black) else Modifier),
       ) {
-        if (!fullscreen && !verticalFullBleed) {
+        if (!fullscreen) {
           PlayerHeader(
             streamer = streamer,
             onBack = appState::back,
@@ -478,8 +495,6 @@ fun PlayerScreen(
         val videoSurfaceColor = Color.Black
         val videoSurfaceModifier = if (fullscreen) {
           Modifier.fillMaxSize()
-        } else if (verticalFullBleed) {
-          Modifier.fillMaxSize()
         } else {
           Modifier.fillMaxWidth().aspectRatio(layoutAspect)
         }
@@ -497,13 +512,23 @@ fun PlayerScreen(
           color = videoSurfaceColor,
           modifier = videoSurfaceModifier,
         ) {
-          Box(modifier = Modifier.fillMaxSize()) {
+          Box(
+            modifier = Modifier
+              .fillMaxSize()
+              .then(
+                if (fullscreen) Modifier.pointerInput(Unit) {
+                  detectTapGestures(
+                    onLongPress = { showFollowedDrawer = true }
+                  )
+                } else Modifier
+              )
+          ) {
             if (url != null) {
               StreamPlayer(
                 url = url!!,
                 fullscreen = fullscreen,
                 liveMode = true,
-                zoomToFill = verticalFullBleed,
+                zoomToFill = false,
                 onVideoAspectRatioChanged = {
                   videoAspectRatio = it
                   if (it != null && it > 0f) videoReady = true
@@ -534,97 +559,72 @@ fun PlayerScreen(
                       color = if (fullscreen) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.85f),
                     )
                   }
-                streamer.isLive == false -> {
-                  Surface(
-                    shape = RoundedCornerShape(28.dp),
-                    color = if (fullscreen) Color.Black.copy(alpha = 0.30f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
-                    tonalElevation = 0.dp,
-                    shadowElevation = 0.dp,
-                  ) {
-                    Column(
-                      modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
-                      verticalArrangement = Arrangement.spacedBy(6.dp),
-                      horizontalAlignment = Alignment.CenterHorizontally,
+                  streamer.isLive == false -> {
+                    Surface(
+                      shape = RoundedCornerShape(28.dp),
+                      color = if (fullscreen) Color.Black.copy(alpha = 0.30f) else MaterialTheme.colorScheme.surface.copy(alpha = 0.75f),
+                      tonalElevation = 0.dp,
+                      shadowElevation = 0.dp,
                     ) {
-                      Text(
-                        text = "主播未开播",
-                        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
-                        color = if (fullscreen) Color.White.copy(alpha = 0.92f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
-                      )
-                      Text(
-                        text = "当前直播间没有在直播",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = if (fullscreen) Color.White.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
-                      )
+                      Column(
+                        modifier = Modifier.padding(horizontal = 18.dp, vertical = 14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                      ) {
+                        Text(
+                          text = "主播未开播",
+                          style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Black),
+                          color = if (fullscreen) Color.White.copy(alpha = 0.92f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.92f),
+                        )
+                        Text(
+                          text = "当前直播间没有在直播",
+                          style = MaterialTheme.typography.bodySmall,
+                          color = if (fullscreen) Color.White.copy(alpha = 0.72f) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.65f),
+                        )
+                      }
                     }
                   }
-                }
-                loading -> {
-                  CircularProgressIndicator(
-                    color = if (fullscreen) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.primary,
-                    strokeWidth = 3.dp,
-                  )
-                }
-                error != null -> {
-                  Text(
-                    text = error!!,
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (fullscreen) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.85f),
-                  )
+                  loading -> {
+                    CircularProgressIndicator(
+                      color = if (fullscreen) Color.White.copy(alpha = 0.85f) else MaterialTheme.colorScheme.primary,
+                      strokeWidth = 3.dp,
+                    )
+                  }
+                  error != null -> {
+                    Text(
+                      text = error!!,
+                      style = MaterialTheme.typography.bodyMedium,
+                      color = if (fullscreen) Color.White.copy(alpha = 0.9f) else MaterialTheme.colorScheme.onSecondary.copy(alpha = 0.85f),
+                    )
+                  }
                 }
               }
             }
-          }
 
-            if (verticalFullBleed) {
-              PlayerHeader(
-                streamer = streamer,
-                onBack = appState::back,
-                followed = streamer?.let(appState::isFollowed) == true,
-                onToggleFollow = { s -> appState.toggleFollow(s) },
-                modifier = Modifier
-                  .align(Alignment.TopStart)
-                  .fillMaxWidth(),
-                overlay = true,
-              )
-            }
-
-            val overlayDanmaku = canShowDanmaku && (fullscreen || isVerticalVideo)
+            val overlayDanmaku = canShowDanmaku && fullscreen
             if (overlayDanmaku) {
-              if (fullscreen && isHorizontalVideo) {
-                ScrollingDanmakuOverlay(
-                  resetKey = streamer?.roomId,
-                  messages = danmakuMessages,
-                  showUser = false,
-                  areaFraction = appState.danmakuAreaFraction,
-                  textScale = appState.landscapeDanmakuFontScale * appState.danmakuFontScale,
-                  opacity = appState.danmakuOpacity,
-                  modifier = Modifier
-                    .fillMaxSize()
-                    .padding(10.dp),
-                )
-              } else {
-                DanmakuOverlay(
-                  messages = danmakuMessages,
-                  showUser = true,
-                  areaFraction = appState.danmakuAreaFraction,
-                  transparentBackground = false,
-                  textScale = appState.danmakuFontScale,
-                  opacity = appState.danmakuOpacity,
-                  modifier = Modifier
-                    .fillMaxSize()
-                    .padding(10.dp),
-                )
-              }
+              ScrollingDanmakuOverlay(
+                resetKey = streamer?.roomId,
+                messages = danmakuMessages,
+                sequence = danmakuSeq,
+                showUser = false,
+                areaFraction = appState.danmakuAreaFraction,
+                textScale = appState.landscapeDanmakuFontScale * appState.danmakuFontScale,
+                opacity = appState.danmakuOpacity,
+                modifier = Modifier
+                  .fillMaxSize()
+                  .padding(10.dp),
+              )
             }
 
             PlayerSideControlsOverlay(
               fullscreen = fullscreen,
-              showFullscreen = isVideoAspectKnown && !isVerticalVideo,
+              showFullscreen = isVideoAspectKnown,
               onToggleFullscreen = {
                 if (fullscreen) {
                   fullscreen = false
                   fullscreenEntry = if (isLandscapeLayout) FullscreenEntry.ManualOff else FullscreenEntry.None
+                  userExitedFullscreen = true
                 } else {
                   fullscreen = true
                   fullscreenEntry = FullscreenEntry.Manual
@@ -639,8 +639,8 @@ fun PlayerScreen(
           }
         }
 
-        if (!fullscreen && !verticalFullBleed) {
-          if (canShowDanmaku && isHorizontalVideo) {
+        if (!fullscreen) {
+          if (canShowDanmaku) {
             HubDanmakuPanel(
               messages = danmakuMessages,
               enhancedPortrait = isPortraitLayout,
@@ -676,6 +676,16 @@ fun PlayerScreen(
         settingsContent()
       }
     }
+
+    FollowedStreamersDrawer(
+      visible = showFollowedDrawer,
+      followedStreamers = appState.followedStreamers.filter { it.isLive },
+      onDismissRequest = { showFollowedDrawer = false },
+      onSelectStreamer = { s ->
+        showFollowedDrawer = false
+        appState.openPlayer(s)
+      },
+    )
   }
 }
 
@@ -787,15 +797,15 @@ private fun PlayerHeader(
   onToggleFollow: (Streamer) -> Unit,
   modifier: Modifier = Modifier,
   overlay: Boolean = false,
-  ) {
-    val liveDot = if (streamer?.isLive == true) MaterialTheme.colorScheme.primary else Color(0xFF9CA3AF)
-    val glassBg = Brush.linearGradient(
-      colors = listOf(
-        Color.Black.copy(alpha = 0.42f),
-        Color.Black.copy(alpha = 0.22f),
-      ),
-    )
-    val glassBorder = Color.White.copy(alpha = 0.16f)
+) {
+  val liveDot = if (streamer?.isLive == true) MaterialTheme.colorScheme.primary else Color(0xFF9CA3AF)
+  val glassBg = Brush.linearGradient(
+    colors = listOf(
+      Color.Black.copy(alpha = 0.42f),
+      Color.Black.copy(alpha = 0.22f),
+    ),
+  )
+  val glassBorder = Color.White.copy(alpha = 0.16f)
 
   Column(
     modifier = modifier
@@ -839,76 +849,76 @@ private fun PlayerHeader(
               verticalAlignment = Alignment.CenterVertically,
               horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-          val avatar = normalizeHttpUrl(streamer?.avatarUrl)
-          Box(modifier = Modifier.size(avatarSize)) {
-            Box(
-              modifier = Modifier
-                .matchParentSize()
-                .clip(CircleShape)
-                .background(Color.White.copy(alpha = 0.10f)),
-              contentAlignment = Alignment.Center,
-            ) {
-              if (avatar != null) {
-                NetworkImage(url = avatar, contentDescription = streamer?.name, modifier = Modifier.matchParentSize())
-              } else {
+              val avatar = normalizeHttpUrl(streamer?.avatarUrl)
+              Box(modifier = Modifier.size(avatarSize)) {
+                Box(
+                  modifier = Modifier
+                    .matchParentSize()
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.10f)),
+                  contentAlignment = Alignment.Center,
+                ) {
+                  if (avatar != null) {
+                    NetworkImage(url = avatar, contentDescription = streamer?.name, modifier = Modifier.matchParentSize())
+                  } else {
+                    Text(
+                      text = streamer?.name?.take(1).orEmpty(),
+                      color = infoPrimary,
+                      style = MaterialTheme.typography.titleSmall,
+                      textAlign = TextAlign.Center,
+                    )
+                  }
+                }
+
+                if (streamer != null) {
+                  Box(
+                    modifier = Modifier
+                      .align(Alignment.BottomEnd)
+                      .offset(x = 1.dp, y = 1.dp)
+                      .size(10.dp)
+                      .clip(CircleShape)
+                      .background(liveDot)
+                      .border(width = 2.dp, color = Color.Transparent, shape = CircleShape),
+                  )
+                }
+              }
+
+              Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(0.dp),
+              ) {
                 Text(
-                  text = streamer?.name?.take(1).orEmpty(),
+                  text = streamer?.name.orEmpty(),
+                  style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
                   color = infoPrimary,
-                  style = MaterialTheme.typography.titleSmall,
-                  textAlign = TextAlign.Center,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
+                )
+                Text(
+                  text = streamer?.title?.trim().orEmpty(),
+                  style = MaterialTheme.typography.labelSmall,
+                  color = infoSecondary,
+                  maxLines = 1,
+                  overflow = TextOverflow.Ellipsis,
                 )
               }
-            }
 
-            if (streamer != null) {
-              Box(
-                modifier = Modifier
-                  .align(Alignment.BottomEnd)
-                  .offset(x = 1.dp, y = 1.dp)
-                  .size(10.dp)
-                  .clip(CircleShape)
-                  .background(liveDot)
-                  .border(width = 2.dp, color = Color.Transparent, shape = CircleShape),
-              )
-            }
-          }
-
-          Column(
-            modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(0.dp),
-          ) {
-            Text(
-              text = streamer?.name.orEmpty(),
-              style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Black),
-              color = infoPrimary,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-              text = streamer?.title?.trim().orEmpty(),
-              style = MaterialTheme.typography.labelSmall,
-              color = infoSecondary,
-              maxLines = 1,
-              overflow = TextOverflow.Ellipsis,
-            )
-          }
-
-          if (streamer != null) {
-            val iconTint = if (followed) Color(0xFFE11D48) else infoSecondary
-            Box(
-              modifier = Modifier
-                .size(avatarSize)
-                .clip(CircleShape)
-                .clickable { onToggleFollow(streamer) },
-              contentAlignment = Alignment.Center,
-            ) {
-              Icon(
-                imageVector = if (followed) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                contentDescription = if (followed) "已收藏" else "收藏",
-                tint = iconTint,
-              )
-            }
-          }
+              if (streamer != null) {
+                val iconTint = if (followed) Color(0xFFE11D48) else infoSecondary
+                Box(
+                  modifier = Modifier
+                    .size(avatarSize)
+                    .clip(CircleShape)
+                    .clickable { onToggleFollow(streamer) },
+                  contentAlignment = Alignment.Center,
+                ) {
+                  Icon(
+                    imageVector = if (followed) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                    contentDescription = if (followed) "已收藏" else "收藏",
+                    tint = iconTint,
+                  )
+                }
+              }
             }
           }
         }
@@ -1064,103 +1074,6 @@ private fun PlayerSettingsDrawer(
 }
 
 @Composable
-private fun DanmakuOverlay(
-  messages: List<DanmakuMessage>,
-  showUser: Boolean,
-  areaFraction: Float,
-  transparentBackground: Boolean,
-  textScale: Float,
-  opacity: Float,
-  modifier: Modifier = Modifier,
-) {
-  BoxWithConstraints(
-    modifier = modifier
-      .fillMaxHeight(areaFraction)
-      .clipToBounds(),
-    contentAlignment = Alignment.BottomStart,
-  ) {
-    val maxBubbleWidth = maxWidth * 0.92f
-    Column(verticalArrangement = Arrangement.Bottom) {
-      messages.takeLast(10).forEach { msg ->
-        DanmakuBubble(
-          user = msg.user,
-          content = msg.content,
-          showUser = showUser,
-          transparentBackground = transparentBackground,
-          modifier = Modifier.widthIn(max = maxBubbleWidth),
-          maxLines = 1,
-          compact = true,
-          textScale = textScale,
-          opacity = opacity,
-        )
-        SpacerLine(4.dp)
-      }
-    }
-  }
-}
-
-@Composable
-private fun DanmakuBubble(
-  user: String,
-  content: String,
-  showUser: Boolean = true,
-  transparentBackground: Boolean = false,
-  modifier: Modifier = Modifier,
-  maxLines: Int = 1,
-  compact: Boolean = false,
-  textScale: Float = 1f,
-  opacity: Float = 1f,
-) {
-  val displayUser = user.trim().ifBlank { "匿名" }
-  val displayContent = content.trim()
-  val effectiveOpacity = opacity.coerceIn(0.35f, 1.0f)
-
-  val text = buildAnnotatedString {
-    if (showUser) {
-      withStyle(
-        SpanStyle(
-          color = Color(0xFFFFE082).copy(alpha = 0.92f * effectiveOpacity),
-          fontWeight = FontWeight.SemiBold,
-        ),
-      ) {
-        append(displayUser)
-      }
-      append("  ")
-    }
-    append(displayContent)
-  }
-
-  val hPad = if (compact) 8.dp else 12.dp
-  val vPad = if (compact) 4.dp else 8.dp
-  val bubbleShape = if (compact) RoundedCornerShape(16.dp) else RoundedCornerShape(14.dp)
-
-  Surface(
-    modifier = modifier,
-    shape = bubbleShape,
-    color = if (transparentBackground) Color.Transparent else Color.Black.copy(alpha = 0.26f * effectiveOpacity),
-    border = null,
-    tonalElevation = 0.dp,
-    shadowElevation = 0.dp,
-  ) {
-    val base = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium)
-    val style =
-      if (textScale == 1f) base
-      else base.copy(
-        fontSize = if (base.fontSize == TextUnit.Unspecified) base.fontSize else base.fontSize * textScale,
-        lineHeight = if (base.lineHeight == TextUnit.Unspecified) base.lineHeight else base.lineHeight * textScale,
-      )
-    Text(
-      text = text,
-      style = style,
-      color = Color.White.copy(alpha = 0.92f * effectiveOpacity),
-      modifier = Modifier.padding(horizontal = hPad, vertical = vPad),
-      maxLines = maxLines,
-      overflow = TextOverflow.Ellipsis,
-    )
-  }
-}
-
-@Composable
 private fun HubDanmakuPanel(
   messages: List<DanmakuMessage>,
   enhancedPortrait: Boolean = false,
@@ -1265,6 +1178,7 @@ private fun HubDanmakuRow(
 private fun ScrollingDanmakuOverlay(
   resetKey: Any?,
   messages: List<DanmakuMessage>,
+  sequence: Long,
   showUser: Boolean,
   areaFraction: Float,
   textScale: Float = 1f,
@@ -1278,7 +1192,7 @@ private fun ScrollingDanmakuOverlay(
     val track: Int,
   )
 
-  var lastCount by remember(resetKey) { mutableIntStateOf(0) }
+  var lastSequence by remember(resetKey) { mutableStateOf(0L) }
   val maxActive = 48
 
   BoxWithConstraints(modifier = modifier) {
@@ -1289,7 +1203,6 @@ private fun ScrollingDanmakuOverlay(
     val regionHeightPx = (heightPx * areaFraction).coerceAtLeast(1f)
     val usableHeightPx = (regionHeightPx - regionTopPx).coerceAtLeast(1f)
 
-    // Avoid overlap when text size changes: compute track count based on estimated bubble height.
     val base = MaterialTheme.typography.bodySmall
     val fontSizePx = with(density) {
       (if (base.fontSize == TextUnit.Unspecified) 12.sp else base.fontSize).toPx()
@@ -1331,36 +1244,33 @@ private fun ScrollingDanmakuOverlay(
       return bestReadyTrack.takeIf { bestReadyAt <= now + 120L }
     }
 
-    LaunchedEffect(messages.size, trackCount, widthPx, textScale) {
-      if (messages.size <= lastCount) {
-        lastCount = messages.size
+    LaunchedEffect(sequence, trackCount, widthPx, textScale) {
+      if (sequence <= lastSequence) {
         return@LaunchedEffect
       }
-      val newItems = messages.subList(lastCount, messages.size)
-      newItems.forEach { msg ->
-        val user = msg.user.trim().ifBlank { "匿名" }
-        val content = msg.content.trim()
-        if (content.isNotEmpty()) {
-          val now = System.nanoTime() / 1_000_000L
-          val track = chooseTrack(now)
-          if (track != null) {
-            if (active.size >= maxActive) active.removeAt(0)
-            active.add(
-              Active(
-                id = System.nanoTime(),
-                user = user,
-                content = content,
-                track = track,
-              ),
-            )
-            val textWidthPx = estimatedTextWidthPx(user, content).coerceAtLeast(1f)
-            val travelWidthPx = widthPx + textWidthPx
-            val minDelayMs = ceil((textWidthPx / travelWidthPx) * 9000f).toLong() + 80L
-            laneAvailableAt[track] = now + minDelayMs
-          }
+      val msg = messages.lastOrNull() ?: return@LaunchedEffect
+      val user = msg.user.trim().ifBlank { "匿名" }
+      val content = msg.content.trim()
+      if (content.isNotEmpty()) {
+        val now = System.nanoTime() / 1_000_000L
+        val track = chooseTrack(now)
+        if (track != null) {
+          if (active.size >= maxActive) active.removeAt(0)
+          active.add(
+            Active(
+              id = System.nanoTime(),
+              user = user,
+              content = content,
+              track = track,
+            ),
+          )
+          val textWidthPx = estimatedTextWidthPx(user, content).coerceAtLeast(1f)
+          val travelWidthPx = widthPx + textWidthPx
+          val minDelayMs = ceil((textWidthPx / travelWidthPx) * 9000f).toLong() + 80L
+          laneAvailableAt[track] = now + minDelayMs
         }
       }
-      lastCount = messages.size
+      lastSequence = sequence
     }
 
     active.forEach { item ->
@@ -1491,5 +1401,184 @@ private fun RowWrapFloat(
         label = { Text(label) },
       )
     }
+  }
+}
+
+@Composable
+private fun FollowedStreamersDrawer(
+  visible: Boolean,
+  followedStreamers: List<Streamer>,
+  onDismissRequest: () -> Unit,
+  onSelectStreamer: (Streamer) -> Unit,
+) {
+  val nightScheme = remember {
+    darkColorScheme(
+      primary = DtvColors.NightAccent,
+      onPrimary = DtvColors.NightTextPrimary,
+      secondary = DtvColors.NightBgTertiary,
+      onSecondary = DtvColors.NightTextPrimary,
+      background = DtvColors.NightBgPrimary,
+      onBackground = DtvColors.NightTextPrimary,
+      surface = DtvColors.NightBgSecondary,
+      onSurface = DtvColors.NightTextPrimary,
+      outline = DtvColors.NightBorder,
+    )
+  }
+
+  Box(modifier = Modifier.fillMaxSize()) {
+    AnimatedVisibility(
+      visible = visible,
+      enter = fadeIn(animationSpec = tween(durationMillis = 140)),
+      exit = fadeOut(animationSpec = tween(durationMillis = 140)),
+      label = "followed_scrim",
+    ) {
+      Box(
+        modifier = Modifier
+          .fillMaxSize()
+          .background(Color.Black.copy(alpha = 0.45f))
+          .clickable(
+            interactionSource = remember { MutableInteractionSource() },
+            indication = null,
+            onClick = onDismissRequest,
+          ),
+      )
+    }
+
+    AnimatedVisibility(
+      visible = visible,
+      enter = slideInHorizontally(animationSpec = tween(durationMillis = 220)) { it } +
+        fadeIn(animationSpec = tween(durationMillis = 140)),
+      exit = slideOutHorizontally(animationSpec = tween(durationMillis = 220)) { it } +
+        fadeOut(animationSpec = tween(durationMillis = 140)),
+      label = "followed_drawer",
+      modifier = Modifier.align(Alignment.CenterEnd),
+    ) {
+      Surface(
+        modifier = Modifier
+          .fillMaxHeight()
+          .fillMaxWidth(0.78f)
+          .widthIn(max = 320.dp),
+        shape = RoundedCornerShape(topStart = 18.dp, bottomStart = 18.dp),
+        color = Color.Black.copy(alpha = 0.72f),
+        contentColor = DtvColors.NightTextPrimary,
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.10f)),
+        tonalElevation = 0.dp,
+        shadowElevation = 6.dp,
+      ) {
+        MaterialTheme(colorScheme = nightScheme) {
+          Column(modifier = Modifier.fillMaxSize()) {
+            Row(
+              modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 14.dp),
+              verticalAlignment = Alignment.CenterVertically,
+            ) {
+              Text(
+                text = "正在直播的关注",
+                style = MaterialTheme.typography.titleMedium,
+                modifier = Modifier.weight(1f),
+              )
+              Text(
+                text = "${followedStreamers.size}",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f),
+              )
+            }
+
+            if (followedStreamers.isEmpty()) {
+              Box(
+                modifier = Modifier.fillMaxSize(),
+                contentAlignment = Alignment.Center,
+              ) {
+                Text(
+                  text = "暂无正在直播的关注",
+                  style = MaterialTheme.typography.bodyMedium,
+                  color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f),
+                )
+              }
+            } else {
+              LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+              ) {
+                items(
+                  items = followedStreamers,
+                  key = { "${it.platform}:${it.roomId}" },
+                ) { s ->
+                  FollowedStreamerRow(
+                    streamer = s,
+                    onClick = { onSelectStreamer(s) },
+                  )
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+
+@Composable
+private fun FollowedStreamerRow(
+  streamer: Streamer,
+  onClick: () -> Unit,
+) {
+  Row(
+    modifier = Modifier
+      .fillMaxWidth()
+      .clip(RoundedCornerShape(12.dp))
+      .clickable(onClick = onClick)
+      .padding(horizontal = 8.dp, vertical = 8.dp),
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(10.dp),
+  ) {
+    Box(
+      modifier = Modifier
+        .size(40.dp)
+        .clip(CircleShape)
+        .background(Color.White.copy(alpha = 0.10f)),
+      contentAlignment = Alignment.Center,
+    ) {
+      val avatar = normalizeHttpUrl(streamer.avatarUrl)
+      if (avatar != null) {
+        NetworkImage(
+          url = avatar,
+          contentDescription = streamer.name,
+          modifier = Modifier.matchParentSize(),
+        )
+      } else {
+        Text(
+          text = streamer.name.take(1),
+          color = Color.White.copy(alpha = 0.9f),
+          style = MaterialTheme.typography.titleSmall,
+        )
+      }
+    }
+
+    Column(modifier = Modifier.weight(1f)) {
+      Text(
+        text = streamer.name,
+        style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.SemiBold),
+        color = Color.White.copy(alpha = 0.92f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+      Text(
+        text = streamer.title.trim().ifBlank { "直播中" },
+        style = MaterialTheme.typography.labelSmall,
+        color = Color.White.copy(alpha = 0.6f),
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
+
+    Box(
+      modifier = Modifier
+        .size(8.dp)
+        .clip(CircleShape)
+        .background(Color(0xFFE11D48)),
+    )
   }
 }
