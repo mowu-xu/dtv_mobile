@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -109,8 +108,6 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.foundation.layout.offset
 import kotlin.math.roundToInt
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -142,9 +139,7 @@ fun PlayerScreen(
   var videoReady by remember(streamer?.roomId) { mutableStateOf(false) }
   var fullscreen by remember(streamer?.roomId) { mutableStateOf(false) }
   var fullscreenEntry by remember(streamer?.roomId) { mutableStateOf(FullscreenEntry.None) }
-  // 用户是否手动退出过全屏。切换直播间时自动重置为 false。
   var userExitedFullscreen by remember(streamer?.roomId) { mutableStateOf(false) }
-  // 自动全屏只触发一次，避免反复切换。
   var autoFullscreenDone by remember(streamer?.roomId) { mutableStateOf(false) }
 
   val scope = rememberCoroutineScope()
@@ -241,7 +236,6 @@ fun PlayerScreen(
       }
     } catch (t: Throwable) {
       if (t is CancellationException) throw t
-      // Swallow network/parse errors to avoid crashing the player UI.
     }
   }
 
@@ -273,7 +267,7 @@ fun PlayerScreen(
     }
   }
 
-  // 自动全屏：等视频宽高比回传后，如果是横屏视频就自动进入全屏（只触发一次）。
+  // 自动全屏：宽高比回传后，无条件进入全屏并锁横屏（只触发一次）。
   LaunchedEffect(videoAspectRatio, streamer?.roomId) {
     if (autoFullscreenDone) return@LaunchedEffect
     if (userExitedFullscreen) return@LaunchedEffect
@@ -283,14 +277,8 @@ fun PlayerScreen(
     }
     val aspect = videoAspectRatio ?: return@LaunchedEffect
     if (aspect <= 0f) return@LaunchedEffect
-    if (aspect < 1f) {
-      // 竖屏视频，不自动全屏。
-      autoFullscreenDone = true
-      return@LaunchedEffect
-    }
-    // 横屏视频，自动全屏。
     fullscreen = true
-    fullscreenEntry = FullscreenEntry.Auto
+    fullscreenEntry = FullscreenEntry.Manual
     autoFullscreenDone = true
   }
 
@@ -312,11 +300,6 @@ fun PlayerScreen(
     val showSettingsDrawer = showSettings && settingsStreamer != null && fullscreen && isLandscapeLayout
     val showSettingsSheet = showSettings && settingsStreamer != null && !showSettingsDrawer
 
-    // 返回键处理：
-    // 1) 关注抽屉打开 → 关闭抽屉
-    // 2) 设置抽屉/底部弹窗打开 → 关闭设置
-    // 3) 全屏 → 退出全屏（并标记用户已手动退出）
-    // 4) 其他 → 返回上一页
     PlatformBackHandler(enabled = showFollowedDrawer) {
       showFollowedDrawer = false
     }
@@ -473,11 +456,7 @@ fun PlayerScreen(
     val effectiveAspect = videoAspectRatio?.takeIf { it > 0f }
     val isVideoAspectKnown = effectiveAspect != null
     val layoutAspect = effectiveAspect ?: (16f / 9f)
-    val isVerticalVideo = isVideoAspectKnown && (effectiveAspect!! < 1f)
-    val isHorizontalVideo = isVideoAspectKnown && !isVerticalVideo
-    val verticalFullBleed = !fullscreen && isVerticalVideo
     val showFullPageLoading = !fullscreen &&
-      !verticalFullBleed &&
       streamer?.isLive == true &&
       url == null &&
       error == null &&
@@ -489,7 +468,7 @@ fun PlayerScreen(
           .fillMaxSize()
           .then(if (fullscreen) Modifier.background(Color.Black) else Modifier),
       ) {
-        if (!fullscreen && !verticalFullBleed) {
+        if (!fullscreen) {
           PlayerHeader(
             streamer = streamer,
             onBack = appState::back,
@@ -515,8 +494,6 @@ fun PlayerScreen(
         val videoSurfaceShape = RoundedCornerShape(0.dp)
         val videoSurfaceColor = Color.Black
         val videoSurfaceModifier = if (fullscreen) {
-          Modifier.fillMaxSize()
-        } else if (verticalFullBleed) {
           Modifier.fillMaxSize()
         } else {
           Modifier.fillMaxWidth().aspectRatio(layoutAspect)
@@ -551,7 +528,7 @@ fun PlayerScreen(
                 url = url!!,
                 fullscreen = fullscreen,
                 liveMode = true,
-                zoomToFill = verticalFullBleed,
+                zoomToFill = false,
                 onVideoAspectRatioChanged = {
                   videoAspectRatio = it
                   if (it != null && it > 0f) videoReady = true
@@ -624,52 +601,25 @@ fun PlayerScreen(
               }
             }
 
-            if (verticalFullBleed) {
-              PlayerHeader(
-                streamer = streamer,
-                onBack = appState::back,
-                followed = streamer?.let(appState::isFollowed) == true,
-                onToggleFollow = { s -> appState.toggleFollow(s) },
-                modifier = Modifier
-                  .align(Alignment.TopStart)
-                  .fillMaxWidth(),
-                overlay = true,
-              )
-            }
-
-            val overlayDanmaku = canShowDanmaku && (fullscreen || isVerticalVideo)
+            val overlayDanmaku = canShowDanmaku && fullscreen
             if (overlayDanmaku) {
-              if (fullscreen && isHorizontalVideo) {
-                ScrollingDanmakuOverlay(
-                  resetKey = streamer?.roomId,
-                  messages = danmakuMessages,
-                  sequence = danmakuSeq,
-                  showUser = false,
-                  areaFraction = appState.danmakuAreaFraction,
-                  textScale = appState.landscapeDanmakuFontScale * appState.danmakuFontScale,
-                  opacity = appState.danmakuOpacity,
-                  modifier = Modifier
-                    .fillMaxSize()
-                    .padding(10.dp),
-                )
-              } else {
-                DanmakuOverlay(
-                  messages = danmakuMessages,
-                  showUser = true,
-                  areaFraction = appState.danmakuAreaFraction,
-                  transparentBackground = false,
-                  textScale = appState.danmakuFontScale,
-                  opacity = appState.danmakuOpacity,
-                  modifier = Modifier
-                    .fillMaxSize()
-                    .padding(10.dp),
-                )
-              }
+              ScrollingDanmakuOverlay(
+                resetKey = streamer?.roomId,
+                messages = danmakuMessages,
+                sequence = danmakuSeq,
+                showUser = false,
+                areaFraction = appState.danmakuAreaFraction,
+                textScale = appState.landscapeDanmakuFontScale * appState.danmakuFontScale,
+                opacity = appState.danmakuOpacity,
+                modifier = Modifier
+                  .fillMaxSize()
+                  .padding(10.dp),
+              )
             }
 
             PlayerSideControlsOverlay(
               fullscreen = fullscreen,
-              showFullscreen = isVideoAspectKnown && !isVerticalVideo,
+              showFullscreen = isVideoAspectKnown,
               onToggleFullscreen = {
                 if (fullscreen) {
                   fullscreen = false
@@ -689,8 +639,8 @@ fun PlayerScreen(
           }
         }
 
-        if (!fullscreen && !verticalFullBleed) {
-          if (canShowDanmaku && isHorizontalVideo) {
+        if (!fullscreen) {
+          if (canShowDanmaku) {
             HubDanmakuPanel(
               messages = danmakuMessages,
               enhancedPortrait = isPortraitLayout,
@@ -1120,103 +1070,6 @@ private fun PlayerSettingsDrawer(
         }
       }
     }
-  }
-}
-
-@Composable
-private fun DanmakuOverlay(
-  messages: List<DanmakuMessage>,
-  showUser: Boolean,
-  areaFraction: Float,
-  transparentBackground: Boolean,
-  textScale: Float,
-  opacity: Float,
-  modifier: Modifier = Modifier,
-) {
-  BoxWithConstraints(
-    modifier = modifier
-      .fillMaxHeight(areaFraction)
-      .clipToBounds(),
-    contentAlignment = Alignment.BottomStart,
-  ) {
-    val maxBubbleWidth = maxWidth * 0.92f
-    Column(verticalArrangement = Arrangement.Bottom) {
-      messages.takeLast(10).forEach { msg ->
-        DanmakuBubble(
-          user = msg.user,
-          content = msg.content,
-          showUser = showUser,
-          transparentBackground = transparentBackground,
-          modifier = Modifier.widthIn(max = maxBubbleWidth),
-          maxLines = 1,
-          compact = true,
-          textScale = textScale,
-          opacity = opacity,
-        )
-        SpacerLine(4.dp)
-      }
-    }
-  }
-}
-
-@Composable
-private fun DanmakuBubble(
-  user: String,
-  content: String,
-  showUser: Boolean = true,
-  transparentBackground: Boolean = false,
-  modifier: Modifier = Modifier,
-  maxLines: Int = 1,
-  compact: Boolean = false,
-  textScale: Float = 1f,
-  opacity: Float = 1f,
-) {
-  val displayUser = user.trim().ifBlank { "匿名" }
-  val displayContent = content.trim()
-  val effectiveOpacity = opacity.coerceIn(0.35f, 1.0f)
-
-  val text = buildAnnotatedString {
-    if (showUser) {
-      withStyle(
-        SpanStyle(
-          color = Color(0xFFFFE082).copy(alpha = 0.92f * effectiveOpacity),
-          fontWeight = FontWeight.SemiBold,
-        ),
-      ) {
-        append(displayUser)
-      }
-      append("  ")
-    }
-    append(displayContent)
-  }
-
-  val hPad = if (compact) 8.dp else 12.dp
-  val vPad = if (compact) 4.dp else 8.dp
-  val bubbleShape = if (compact) RoundedCornerShape(16.dp) else RoundedCornerShape(14.dp)
-
-  Surface(
-    modifier = modifier,
-    shape = bubbleShape,
-    color = if (transparentBackground) Color.Transparent else Color.Black.copy(alpha = 0.26f * effectiveOpacity),
-    border = null,
-    tonalElevation = 0.dp,
-    shadowElevation = 0.dp,
-  ) {
-    val base = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium)
-    val style =
-      if (textScale == 1f) base
-      else base.copy(
-        fontSize = if (base.fontSize == TextUnit.Unspecified) base.fontSize else base.fontSize * textScale,
-        lineHeight = if (base.lineHeight == TextUnit.Unspecified) base.lineHeight else base.lineHeight * textScale,
-      )
-    Text(
-      text = text,
-      style = style,
-      color = Color.White.copy(alpha = 0.92f * effectiveOpacity),
-      modifier = Modifier.padding(horizontal = hPad, vertical = vPad),
-      maxLines = maxLines,
-      overflow = TextOverflow.Ellipsis,
-    )
   }
 }
 
