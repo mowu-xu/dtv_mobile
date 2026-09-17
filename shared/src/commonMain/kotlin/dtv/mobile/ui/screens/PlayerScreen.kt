@@ -1582,3 +1582,64 @@ private fun FollowedStreamerRow(
     )
   }
 }
+
+@Composable
+private fun DanmakuBubble(
+  user: String,
+  content: String,
+  showUser: Boolean = true,
+  transparentBackground: Boolean = false,
+  modifier: Modifier = Modifier,
+  maxLines: Int = 1,
+  compact: Boolean = false,
+  textScale: Float = 1f,
+  opacity: Float = 1f,
+) {
+  val displayUser = user.trim().ifBlank { "匿名" }
+  val displayContent = content.trim()
+  val effectiveOpacity = opacity.coerceIn(0.35f, 1.0f)
+
+  val text = buildAnnotatedString {
+    if (showUser) {
+      withStyle(
+        SpanStyle(
+          color = Color(0xFFFFE082).copy(alpha = 0.92f * effectiveOpacity),
+          fontWeight = FontWeight.SemiBold,
+        ),
+      ) {
+        append(displayUser)
+      }
+      append("  ")
+    }
+    append(displayContent)
+  }
+
+  val hPad = if (compact) 8.dp else 12.dp
+  val vPad = if (compact) 4.dp else 8.dp
+  val bubbleShape = if (compact) RoundedCornerShape(16.dp) else RoundedCornerShape(14.dp)
+
+  Surface(
+    modifier = modifier,
+    shape = bubbleShape,
+    color = if (transparentBackground) Color.Transparent else Color.Black.copy(alpha = 0.26f * effectiveOpacity),
+    border = null,
+    tonalElevation = 0.dp,
+    shadowElevation = 0.dp,
+  ) {
+    val base = MaterialTheme.typography.bodySmall.copy(fontWeight = FontWeight.Medium)
+    val style =
+      if (textScale == 1f) base
+      else base.copy(
+        fontSize = if (base.fontSize == TextUnit.Unspecified) base.fontSize else base.fontSize * textScale,
+        lineHeight = if (base.lineHeight == TextUnit.Unspecified) base.lineHeight else base.lineHeight * textScale,
+      )
+    Text(
+      text = text,
+      style = style,
+      color = Color.White.copy(alpha = 0.92f * effectiveOpacity),
+      modifier = Modifier.padding(horizontal = hPad, vertical = vPad),
+      maxLines = maxLines,
+      overflow = TextOverflow.Ellipsis,
+    )
+  }
+}
